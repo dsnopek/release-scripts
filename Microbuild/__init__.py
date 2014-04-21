@@ -1,5 +1,7 @@
 
+import os
 import collections
+import subprocess
 
 class Environment(collections.Mapping):
     """An immutable dict-like object for holding information about the
@@ -31,6 +33,17 @@ class Environment(collections.Mapping):
         values.update(kw)
         return Environment(values)
 
+class TaskExecutionError(Exception):
+    def __init__(self, message, task, original=None):
+        Exception.__init__(self, message)
+
+        if original is None:
+            original = self
+
+        self.original = original
+        self.task = task
+        self.env = task.env
+
 class Task(object):
     def __init__(self, env, dependencies=None):
         self.env = env
@@ -50,13 +63,52 @@ class Task(object):
     def execute(self):
         for dependency in self.dependencies:
             if not dependency.isDone():
-                depedency.execute()
-        if not self.isReady():
-            raise Exception("All dependencies executed but still not ready! Something has gone wrong.")
-        self._execute()
+                dependency.execute()
+        if not self._finished():
+            try:
+                self._execute()
+            except Exception, e:
+                raise TaskExecutionError("Task execution failed", self, e)
+
+            #if not self._finished():
+            #    raise TaskUnfinishedError("Task executed but isn't marked as finished! Something has gone wrong.", self)
 
     def _execute(self):
         raise NotImplementedError()
 
     def _finished(self):
         raise NotImplementedError()
+
+if not hasattr(subprocess, 'check_output'):
+    def check_output(*popenargs, **kwargs):
+        r"""Run command with arguments and return its output as a byte string.
+     
+        Backported from Python 2.7 as it's implemented as pure python on stdlib.
+     
+        >>> check_output(['/usr/bin/python', '--version'])
+        Python 2.6.2
+        """
+        process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
+        output, unused_err = process.communicate()
+        retcode = process.poll()
+        if retcode:
+            cmd = kwargs.get("args")
+            if cmd is None:
+                cmd = popenargs[0]
+            error = subprocess.CalledProcessError(retcode, cmd)
+            error.output = output
+            raise error
+        return output
+
+    subprocess.check_output = check_output
+
+def execute_cmd(command, capture=False):
+    if capture:
+        return subprocess.check_output(command, shell=True)
+
+    ret = os.system(command)
+    if ret != 0:
+        raise Exception("Execution failed: %s" % command)
+
+def check_cmd(command):
+    return subprocess.call(command, shell=True) == 0
