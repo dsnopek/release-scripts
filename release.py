@@ -167,7 +167,7 @@ class PanopolyPreReleaseTask(Task):
         shutil.copy(self.env['make_file'], self.env['temp_make_file'])
 
         # Copy the release make file into place.
-        update_makefile_version(self.env['release_make_file'], self.env['new_version'])
+        update_makefile_version(self.env['release_make_file'], self.env['short_version'])
         shutil.copy(self.env['release_make_file'], self.env['make_file'])
 
         os.chdir(self.env['root'])
