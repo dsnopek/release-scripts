@@ -66,7 +66,7 @@ class GitPushTagTask(Task):
         os.chdir(self.env['root'])
         execute_cmd("git push --tags")
 
-class UpdateReleaseNotesTask(Task):
+class UpdateChangelogTask(Task):
     def _open(self, mode):
         return open(os.path.join(self.env['root'], 'CHANGELOG.txt'), mode)
     
@@ -139,7 +139,7 @@ class PanopolyModuleReleaseTask(Task):
         env = self.env
 
         self.dependencies.append(GitCloneTask(env))
-        self.dependencies.append(UpdateReleaseNotesTask(env))
+        self.dependencies.append(UpdateChangelogTask(env))
         self.dependencies.append(GitTagTask(env))
         if self.env['push']:
             self.dependencies.append(GitPushTagTask(env))
@@ -227,6 +227,7 @@ class PanopolyProfileReleaseTask(Task):
             )
             self.dependencies.append(PanopolyModuleReleaseTask(module_env))
         
+        self.dependencies.append(UpdateChangelogTask(env))
         self.dependencies.append(PanopolyPreReleaseTask(env))
         self.dependencies.append(GitTagTask(env))
         if self.env['push']:
