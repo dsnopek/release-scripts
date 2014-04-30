@@ -236,6 +236,8 @@ class PanopolyPostReleaseTask(Task):
         os.chdir(self.env['root'])
         execute_cmd("git commit -a -m '%s'" % self.env['messages'][1])
 
+        # TODO: update the .travis.yml file to start testing the new release
+
 class PanopolyProfileReleaseTask(Task):
     modules = [
         'panopoly_admin',
