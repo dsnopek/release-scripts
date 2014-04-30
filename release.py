@@ -166,6 +166,11 @@ class PanopolyPreReleaseTask(Task):
         update_makefile_version(self.env['release_make_file'], self.env['short_version'])
         shutil.copy(self.env['release_make_file'], self.env['make_file'])
 
+        # Update all the build makefiles as well.
+        update_makefile_version(self.env['build_pantheon_make_file'], self.env['short_version'])
+        update_makefile_version(self.env['build_panopoly_make_file'], self.env['short_version'])
+        update_makefile_version(self.env['build_release_make_file'], self.env['short_version'])
+
         os.chdir(self.env['root'])
         execute_cmd("git commit -a -m '%s'" % self.env['messages'][0])
 
@@ -206,6 +211,9 @@ class PanopolyProfileReleaseTask(Task):
             make_file = os.path.join(my_root, 'drupal-org.make'),
             temp_make_file = os.path.join(my_root, 'drupal-org-temporary.make'),
             release_make_file = os.path.join(my_root, 'drupal-org-release.make'),
+            build_pantheon_make_file = os.path.join(my_root, 'build-panopoly-pantheon.make'),
+            build_panopoly_make_file = os.path.join(my_root, 'build-panopoly.make'),
+            build_release_make_file = os.path.join(my_root, 'build-panopoly-release.make'),
             short_version = short_version,
             messages = [
                 "Getting ready for the %s release" % short_version,
