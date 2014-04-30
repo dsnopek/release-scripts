@@ -289,8 +289,8 @@ class PanopolyProfileReleaseTask(Task):
         #if self.env['push']:
         #    self.dependencies.append(GitPushTagTask(env))
         self.dependencies.append(PanopolyPostReleaseTask(env))
-        # TODO: Make the actual release on Drupal.org.
-        #self.dependencies.append(CreateReleaseTask(env))
+        #if self.env['push']:
+        #    self.dependencies.append(CreateReleaseTask(env))
         
     def _finished(self):
         # TODO: This isn't a real Task, and so having a _finished() just creates problems.
