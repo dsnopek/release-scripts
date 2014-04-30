@@ -74,6 +74,7 @@ class GitPushTagTask(Task):
 
     def _execute(self):
         os.chdir(self.env['root'])
+        execute_cmd("git push")
         execute_cmd("git push --tags")
 
 class GitCommitTask(Task):
