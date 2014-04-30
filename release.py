@@ -4,6 +4,8 @@ import shutil
 import re
 import datetime
 
+import mechanize
+
 from Microbuild import Environment, Task, TaskExecutionError, execute_cmd, check_cmd
 
 def update_makefile_revision(make_file, project_name, revision):
@@ -38,6 +40,14 @@ def update_makefile_version(make_file, version):
 def get_latest_commit_message(root):
     os.chdir(root)
     return execute_cmd('git log --pretty=format:%s -n 1 HEAD', capture=True)
+
+def browser_selectForm(br, form_id):
+    for form in br.forms():
+        control = form.find_control("form_id")
+        if control.value == form_id:
+            br.form = form
+            return
+    raise ValueError("Unable to find form: %s" % form_id)
 
 class GitCloneTask(Task):
     def _finished(self):
@@ -124,8 +134,49 @@ class UpdateMakeFileForModuleRevisionTask(Task):
         update_makefile_revision(self.env['make_file'], self.env['project_name'], self._latest_revision())
 
 class CreateReleaseTask(Task):
-    # TODO: This should actually create the release on Drupal.org!
-    pass
+    def _finished(self):
+        releases = execute_cmd("%(drush)s pm-releases %(project_name)s" % self.env, capture=True)
+        return self.env['new_version'] in releases
+    
+    def _browser(self):
+        br = mechanize.Browser()
+        # Sorry Drupal.org, we have to ignore robots.txt to get this done.
+        br.set_handle_robots(False)
+
+        # First, we have to login.
+        br.open("https://drupal.org/user/login")
+        browser_selectForm(br, 'user_login')
+        br['name'] = self.env['username']
+        br['pass'] = self.env['password']
+        response = br.submit()
+        if response.geturl() == 'https://drupal.org/user/login':
+            raise Exception("Login failed.")
+        
+        return br
+
+    def _execute(self):
+        br = self._browser()
+
+        # Navigate to the 'Add new release' form and select the release tag.
+        br.open("https://drupal.org/project/" + self.env['project_name'])
+        br.follow_link(br.find_link(text='Add new release'))
+        browser_selectForm(br, 'project_release_node_form')
+        control = br.form.find_control("versioncontrol_release_label_id")
+        found = False
+        for item in control.items:
+            if item.get_labels()[0].text == self.env['new_version']:
+                br['versioncontrol_release_label_id'] = [item.name]
+                found = True
+                break
+        if not found:
+            raise Exception("Version not found.")
+        response = br.submit()
+
+        # Set the release notes and actually submit.
+        browser_selectForm(br, 'project_release_node_form')
+        br['body[und][0][value]'] = execute_cmd('%(drush)s rn %(old_version)s %(new_version)s' % self.env, capture=True)
+        response = br.submit()
+        
 
 class PanopolyModuleReleaseTask(Task):
     def __init__(self, *args, **kw):
@@ -139,8 +190,7 @@ class PanopolyModuleReleaseTask(Task):
         self.dependencies.append(GitTagTask(env))
         if self.env['push']:
             self.dependencies.append(GitPushTagTask(env))
-        # TODO: Make the actual release on Drupal.org.
-        #self.dependencies.append(CreateReleaseTask(self.env))
+            self.dependencies.append(CreateReleaseTask(self.env))
 
         # TODO: This isn't a safe Task! It's messing with global state.
         # We don't put 'panopoly_demo' in the drupal-org.make file.
@@ -234,8 +284,8 @@ class PanopolyProfileReleaseTask(Task):
         self.dependencies.append(UpdateChangelogTask(env))
         self.dependencies.append(PanopolyPreReleaseTask(env))
         self.dependencies.append(GitTagTask(env))
-        if self.env['push']:
-            self.dependencies.append(GitPushTagTask(env))
+        #if self.env['push']:
+        #    self.dependencies.append(GitPushTagTask(env))
         self.dependencies.append(PanopolyPostReleaseTask(env))
         # TODO: Make the actual release on Drupal.org.
         #self.dependencies.append(CreateReleaseTask(env))
@@ -258,6 +308,7 @@ def main():
     parser.add_argument('new_version', help='The previous version string (ex. 7.x-1.3)')
     parser.add_argument('--root', '-r', dest='root', required=True, help='The path to pull all the git repos.')
     parser.add_argument('--username', '-u', dest='username', required=True, help='Your Drupal.org username')
+    parser.add_argument('--password', '-p', dest='password', required=True, help='Your Drupal.org password')
     parser.add_argument('--drush', dest='drush', default='drush', help='Path to your drush executable')
     parser.add_argument('--branch', dest='branch', default='7.x-1.x', help='The branch that the new version is on')
     parser.add_argument('--push', dest='push', default=False, action='store_true', help='The branch that the new version is on')
@@ -270,6 +321,7 @@ def main():
         'old_version': args.old_version,
         'new_version': args.new_version,
         'username': args.username,
+        'password': args.password,
         'root': os.path.abspath(args.root),
         'drush': args.drush,
         'branch': args.branch,
