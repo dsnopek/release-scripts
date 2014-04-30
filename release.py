@@ -66,31 +66,29 @@ class GitPushTagTask(Task):
         os.chdir(self.env['root'])
         execute_cmd("git push --tags")
 
+class GitCommitTask(Task):
+    def _finished(self):
+        os.chdir(self.env['root'])
+        commits = execute_cmd("git log --oneline --grep='%(commit_message)s'" % self.env, capture=True)
+        return self.env['commit_message'] in commits
+
+    def _execute(self):
+        os.chdir(self.env['root'])
+        execute_cmd("git commit -a -m '%(commit_message)s'" % self.env)
+
 class UpdateChangelogTask(Task):
     def _open(self, mode):
         return open(os.path.join(self.env['root'], 'CHANGELOG.txt'), mode)
     
-    def _clean_slate(self):
+    def _finished(self):
         os.chdir(self.env['root'])
 
-        # Ensure that we are on the right branch and have no left over changes.
-        execute_cmd("git checkout %(branch)s >/dev/null 2>&1" % self.env)
-        execute_cmd("git reset --hard >/dev/null")
-        execute_cmd("git checkout -- . >/dev/null")
-
-    def _finished(self):
-        self._clean_slate()
-
-        try:
-            # See if the version is mentioned in the first 30 characters
-            with self._open('rt') as fd:
-                return self.env['new_version'] in fd.read(30)
-        except IOError:
-            # We assume this means that there is no changelog.
-            return True
+        # See if the version is mentioned in the first 30 characters
+        with self._open('rt') as fd:
+            return self.env['new_version'] in fd.read(100)
 
     def _execute(self):
-        self._clean_slate()
+        os.chdir(self.env['root'])
 
         with self._open('rt') as fd:
             changelog = fd.read()
@@ -103,9 +101,6 @@ class UpdateChangelogTask(Task):
         with self._open('wt') as fd:
             fd.write(entry)
             fd.write(changelog)
-        
-        # Commit this.
-        execute_cmd("git commit -a -m 'Updated CHANGELOG.txt'")
 
 # TODO: This isn't safe to do one at a time on the drupal-org.make - we've got
 # to do them all at once when restoring the drupal-org.make.
@@ -140,6 +135,7 @@ class PanopolyModuleReleaseTask(Task):
 
         self.dependencies.append(GitCloneTask(env))
         self.dependencies.append(UpdateChangelogTask(env))
+        self.dependencies.append(GitCommitTask(env.clone(commit_message='Updated CHANGELOG.txt for %(new_version)s release.' % env)))
         self.dependencies.append(GitTagTask(env))
         if self.env['push']:
             self.dependencies.append(GitPushTagTask(env))
