@@ -1,0 +1,15 @@
+TODO
+====
+
+ * Make the 'Task' only have the .execute() and .finished() methods and move
+   the executing logic into an 'Executor' class.
+ * The 'Tasks' will be added to the 'Executor' and given their environment and
+   dependencies there. (Maybe wrap the Task with the other stuff in an object?)
+ * Move some of the more generic Tasks (like the Git ones) into Microbuild
+   itself
+ * For the Tasks that just have dependencies, those should really be declaring
+   their own 'sub-build' with a new Executor and a .finished() which checks
+   that the last step is complete (or just being a function that builds up
+   the single Executor).
+ * Maybe 'Executor' should be called 'Build'?
+
