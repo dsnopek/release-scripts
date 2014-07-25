@@ -248,6 +248,7 @@ class PanopolyProfileReleaseTask(Task):
         'panopoly_magic',
         'panopoly_pages',
         'panopoly_search',
+        'panopoly_test',
         'panopoly_theme',
         'panopoly_users',
         'panopoly_widgets',
