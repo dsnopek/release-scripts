@@ -80,6 +80,8 @@ class GitPushTagTask(Task):
 class GitCommitTask(Task):
     def _finished(self):
         os.chdir(self.env['root'])
+        # TODO: This is a temporary hack to help us get through the 1.8 release - remove after!
+        #return False
         commits = execute_cmd("git log --oneline --grep='%(commit_message)s'" % self.env, capture=True)
         return self.env['commit_message'] in commits
 
@@ -163,6 +165,11 @@ class CreateReleaseTask(Task):
         br.follow_link(br.find_link(text='Add new release'))
         browser_selectForm(br, 'project_release_node_form')
         control = br.form.find_control("versioncontrol_release_label_id")
+        # TODO: This is temporary for the 1.8 release - remove afterward...
+        #try:
+        #  control = br.form.find_control("versioncontrol_release_label_id")
+        #except:
+        #  return
         found = False
         for item in control.items:
             if item.get_labels()[0].text == self.env['new_version']:
