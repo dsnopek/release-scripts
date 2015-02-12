@@ -74,8 +74,8 @@ class GitPushTagTask(Task):
 
     def _execute(self):
         os.chdir(self.env['root'])
-        execute_cmd("git push")
-        execute_cmd("git push --tags")
+        execute_cmd("git push", retry=2)
+        execute_cmd("git push --tags", retry=2)
 
 class GitCommitTask(Task):
     def _finished(self):
@@ -164,12 +164,12 @@ class CreateReleaseTask(Task):
         br.open("https://drupal.org/project/" + self.env['project_name'])
         br.follow_link(br.find_link(text='Add new release'))
         browser_selectForm(br, 'project_release_node_form')
-        control = br.form.find_control("versioncontrol_release_label_id")
+        #control = br.form.find_control("versioncontrol_release_label_id")
         # TODO: This is temporary for the 1.8 release - remove afterward...
-        #try:
-        #  control = br.form.find_control("versioncontrol_release_label_id")
-        #except:
-        #  return
+        try:
+          control = br.form.find_control("versioncontrol_release_label_id")
+        except:
+          return
         found = False
         for item in control.items:
             if item.get_labels()[0].text == self.env['new_version']:

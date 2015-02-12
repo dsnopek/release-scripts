@@ -102,13 +102,19 @@ if not hasattr(subprocess, 'check_output'):
 
     subprocess.check_output = check_output
 
-def execute_cmd(command, capture=False):
-    if capture:
-        return subprocess.check_output(command, shell=True)
+def execute_cmd(command, capture=False, retry=0):
+    try:
+      if capture:
+          return subprocess.check_output(command, shell=True)
 
-    ret = os.system(command)
-    if ret != 0:
-        raise Exception("Execution failed: %s" % command)
+      ret = os.system(command)
+      if ret != 0:
+          raise Exception("Execution failed: %s" % command)
+    except Exception, e:
+        if retry > 0:
+            return execute_cmd(command, capture, retry - 1)
+        else:
+            raise
 
 def check_cmd(command):
     return subprocess.call(command, shell=True) == 0
