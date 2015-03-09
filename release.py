@@ -3,6 +3,7 @@ import os
 import shutil
 import re
 import datetime
+import textwrap
 
 import mechanize
 
@@ -110,6 +111,7 @@ class UpdateChangelogTask(Task):
         entry = entry.replace(self.env['branch'], self.env['new_version'])
         entry = entry.replace('%ad', datetime.date.today().strftime('%Y-%m-%d'))
         entry = entry.replace('\n- .\n', '\n- No changes since last release.\n')
+        entry = textwrap.fill(entry, 80, subsequent_indent='  ')
 
         with self._open('wt') as fd:
             fd.write(entry)
