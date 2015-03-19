@@ -101,6 +101,13 @@ class UpdateChangelogTask(Task):
         with self._open('rt') as fd:
             return self.env['new_version'] in fd.read(100)
 
+    def _wrap_changelog_entry(self, entry):
+        lines = []
+        for line in entry.split('\n'):
+            result = textwrap.wrap(line, width=80, subsequent_indent='  ', replace_whitespace=False)
+            lines = lines + result
+        return '\n'.join(lines)
+
     def _execute(self):
         os.chdir(self.env['root'])
 
@@ -111,7 +118,8 @@ class UpdateChangelogTask(Task):
         entry = entry.replace(self.env['branch'], self.env['new_version'])
         entry = entry.replace('%ad', datetime.date.today().strftime('%Y-%m-%d'))
         entry = entry.replace('\n- .\n', '\n- No changes since last release.\n')
-        entry = textwrap.fill(entry, 80, subsequent_indent='  ')
+        entry = self._wrap_changelog_entry(entry)
+        entry = entry + '\n\n'
 
         with self._open('wt') as fd:
             fd.write(entry)
