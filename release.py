@@ -5,6 +5,7 @@ import re
 import datetime
 import textwrap
 
+import pyotp
 import mechanize
 
 from Microbuild import Environment, Task, TaskExecutionError, execute_cmd, check_cmd
@@ -162,7 +163,16 @@ class CreateReleaseTask(Task):
         br['name'] = self.env['username']
         br['pass'] = self.env['password']
         response = br.submit()
-        if response.geturl() == 'https://drupal.org/user/login':
+
+        # Attempt to provide the TFA code.
+        if response.geturl().startswith('https://www.drupal.org/system/tfa'):
+            browser_selectForm(br, 'tfa_form')
+            code = str(pyotp.TOTP(self.env['secret']).now()).zfill(6)
+            br['code'] = code
+            response = br.submit()
+
+        # If we haven't landed on our user page, then we assume this has failed.
+        if response.geturl() != 'https://www.drupal.org/user':
             raise Exception("Login failed.")
         
         return br
@@ -330,6 +340,7 @@ def main():
     parser.add_argument('--root', '-r', dest='root', required=True, help='The path to pull all the git repos.')
     parser.add_argument('--username', '-u', dest='username', required=True, help='Your Drupal.org username')
     parser.add_argument('--password', '-p', dest='password', required=True, help='Your Drupal.org password')
+    parser.add_argument('--totp-secret', '-s', dest='secret', required=False, help='Your TOTP secret for filling in the TFA code')
     parser.add_argument('--drush', dest='drush', default='drush', help='Path to your drush executable')
     parser.add_argument('--branch', dest='branch', default='7.x-1.x', help='The branch that the new version is on')
     parser.add_argument('--push', dest='push', default=False, action='store_true', help='The branch that the new version is on')
@@ -343,6 +354,7 @@ def main():
         'new_version': args.new_version,
         'username': args.username,
         'password': args.password,
+        'secret': args.secret,
         'root': os.path.abspath(args.root),
         'drush': args.drush,
         'branch': args.branch,
