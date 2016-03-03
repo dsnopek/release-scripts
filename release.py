@@ -147,12 +147,21 @@ class UpdateMakeFileForModuleRevisionTask(Task):
     def _execute(self):
         update_makefile_revision(self.env['make_file'], self.env['project_name'], self._latest_revision())
 
+# @todo: remove this global
+br = None
+
 class CreateReleaseTask(Task):
     def _finished(self):
         releases = execute_cmd("%(drush)s pm-releases %(project_name)s" % self.env, capture=True)
         return self.env['new_version'] in releases
     
     def _browser(self):
+        # Terrible hack to maintain a single browser - make not use global
+        # state later...
+        global br
+        if br:
+            return br
+
         br = mechanize.Browser()
         # Sorry Drupal.org, we have to ignore robots.txt to get this done.
         br.set_handle_robots(False)
@@ -163,6 +172,7 @@ class CreateReleaseTask(Task):
         br['name'] = self.env['username']
         br['pass'] = self.env['password']
         response = br.submit()
+        print 'After username/password:', response.geturl()
 
         # Attempt to provide the TFA code.
         if response.geturl().startswith('https://www.drupal.org/system/tfa'):
@@ -171,6 +181,7 @@ class CreateReleaseTask(Task):
             br['code'] = code
             response = br.submit()
 
+        print 'After TFA:', response.geturl()
         # If we haven't landed on our user page, then we assume this has failed.
         if response.geturl() != 'https://www.drupal.org/user':
             raise Exception("Login failed.")
