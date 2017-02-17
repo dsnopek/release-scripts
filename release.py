@@ -116,9 +116,11 @@ class UpdateChangelogTask(Task):
             changelog = fd.read()
 
         entry = execute_cmd("%(drush)s rn %(old_version)s %(branch)s --changelog" % self.env, capture=True)
-        entry = entry.replace(self.env['branch'], self.env['new_version'])
-        entry = entry.replace('%ad', datetime.date.today().strftime('%Y-%m-%d'))
-        entry = entry.replace('\n- .\n', '\n- No changes since last release.\n')
+        # Replace first line.
+        entry = "\n".join(entry.split("\n")[1:])
+        entry = ("%s, %s\n" % (self.env['new_version'], datetime.date.today().strftime('%Y-%m-%d'))) + entry
+        if not '- ' in entry:
+            entry = entry.replace('\n\n', '\n- No changes since last release.\n')
         entry = self._wrap_changelog_entry(entry)
         entry = entry + '\n\n'
 
