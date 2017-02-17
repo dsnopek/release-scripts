@@ -177,13 +177,21 @@ class CreateReleaseTask(Task):
         print 'After username/password:', response.geturl()
 
         # Attempt to provide the TFA code.
-        if response.geturl().startswith('https://www.drupal.org/system/tfa'):
-            browser_selectForm(br, 'tfa_form')
-            code = str(pyotp.TOTP(self.env['secret']).now()).zfill(6)
-            br['code'] = code
-            response = br.submit()
+        for i in [1, 2, 3]:
+          if response.geturl().startswith('https://www.drupal.org/system/tfa'):
+              browser_selectForm(br, 'tfa_form')
+              code = str(pyotp.TOTP(self.env['secret']).now()).zfill(6)
+              br['code'] = code
+              response = br.submit()
 
-        print 'After TFA:', response.geturl()
+          print 'After TFA:', response.geturl()
+
+          if response.geturl() == 'https://www.drupal.org/user':
+              break
+
+          if i > 1:
+              print response.read()
+
         # If we haven't landed on our user page, then we assume this has failed.
         if response.geturl() != 'https://www.drupal.org/user':
             raise Exception("Login failed.")
