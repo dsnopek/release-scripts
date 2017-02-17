@@ -154,7 +154,7 @@ br = None
 
 class CreateReleaseTask(Task):
     def _finished(self):
-        releases = execute_cmd("%(drush)s pm-releases %(project_name)s" % self.env, capture=True)
+        releases = execute_cmd("%(drush)s pm-releases %(project_name)s-7.x" % self.env, capture=True)
         return self.env['new_version'] in releases
     
     def _browser(self):
