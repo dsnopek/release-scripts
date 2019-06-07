@@ -56,7 +56,7 @@ class GitCloneTask(Task):
         return os.path.exists(os.path.join(self.env['root'], '.git', 'config'))
     
     def _execute(self):
-        repo = "%s@git.drupal.org:project/%s.git" % (self.env['username'], self.env['project_name'])
+        repo = "git@git.drupal.org:project/%s.git" % (self.env['project_name'],)
         execute_cmd("git clone %s %s" % (repo, self.env['root']))
 
 class GitTagTask(Task):
@@ -93,7 +93,7 @@ class GitCommitTask(Task):
 
 class UpdateChangelogTask(Task):
     def _open(self, mode):
-        return open(os.path.join(self.env['root'], 'CHANGELOG.txt'), mode)
+        return open(self.env.get('changelog_path', os.path.join(self.env['root'], 'CHANGELOG.txt')), mode)
     
     def _finished(self):
         os.chdir(self.env['root'])
@@ -234,18 +234,16 @@ class PanopolyModuleReleaseTask(Task):
         env = self.env
 
         self.dependencies.append(GitCloneTask(env))
+        # TODO: This isn't a safe Task! It's messing with global state (the
+        #       CHANGELOG.txt files in the main profile repo).
         self.dependencies.append(UpdateChangelogTask(env))
-        self.dependencies.append(GitCommitTask(env.clone(commit_message='Updated CHANGELOG.txt for %(new_version)s release.' % env)))
+        if self.env['project_name'] == 'panopoly_demo':
+            self.dependencies.append(GitCommitTask(env.clone(commit_message='Updated CHANGELOG.txt for %(new_version)s release.' % env)))
         self.dependencies.append(GitTagTask(env))
         if self.env['push']:
             self.dependencies.append(GitPushTagTask(env))
             self.dependencies.append(CreateReleaseTask(self.env))
 
-        # TODO: This isn't a safe Task! It's messing with global state.
-        # We don't put 'panopoly_demo' in the drupal-org.make file.
-        if self.env['project_name'] != 'panopoly_demo':
-            self.dependencies.append(UpdateMakeFileForModuleRevisionTask(env))
-    
     def _finished(self):
         # TODO: This isn't a real Task, and so having a _finished() just creates problems.
         pass
@@ -255,37 +253,11 @@ class PanopolyModuleReleaseTask(Task):
 
 class PanopolyPreReleaseTask(Task):
     def _finished(self):
-        return get_latest_commit_message(self.env['root']) in self.env['messages']
+        return get_latest_commit_message(self.env['root']) == self.env['message']
 
     def _execute(self):
-        # Stash the existing make file temporarily.
-        shutil.copy(self.env['make_file'], self.env['temp_make_file'])
-
-        # Copy the release make file into place.
-        update_makefile_version(self.env['release_make_file'], self.env['short_version'])
-        shutil.copy(self.env['release_make_file'], self.env['make_file'])
-
-        # Update all the build makefiles as well.
-        update_makefile_version(self.env['build_pantheon_make_file'], self.env['short_version'])
-        update_makefile_version(self.env['build_panopoly_make_file'], self.env['short_version'])
-        update_makefile_version(self.env['build_release_make_file'], self.env['short_version'])
-
         os.chdir(self.env['root'])
-        execute_cmd("git commit -a -m '%s'" % self.env['messages'][0])
-
-class PanopolyPostReleaseTask(Task):
-    def _finished(self):
-        return get_latest_commit_message(self.env['root']) == self.env['messages'][1]
-
-    def _execute(self):
-        # Copy the temporary make file back and commit.
-        shutil.copy(self.env['temp_make_file'], self.env['make_file'])
-        os.unlink(self.env['temp_make_file'])
-
-        os.chdir(self.env['root'])
-        execute_cmd("git commit -a -m '%s'" % self.env['messages'][1])
-
-        # TODO: update the .travis.yml file to start testing the new release
+        execute_cmd("git commit -a -m '%s'" % self.env['message'])
 
 class PanopolyProfileReleaseTask(Task):
     modules = [
@@ -317,19 +289,22 @@ class PanopolyProfileReleaseTask(Task):
             build_panopoly_make_file = os.path.join(my_root, 'build-panopoly.make'),
             build_release_make_file = os.path.join(my_root, 'build-panopoly-release.make'),
             short_version = short_version,
-            messages = [
-                "Getting ready for the %s release" % short_version,
-                "Restored drupal-org.make after the %s release" % short_version,
-            ],
+            message = "Getting ready for the %s release" % short_version,
             modules = self.modules
         )
 
         self.dependencies.append(GitCloneTask(env))
 
         for project_name in self.modules:
+            project_root = os.path.join(self.env['root'], project_name)
+            if project_name == 'panopoly_demo':
+                changelog_path = os.path.join(project_root, 'CHANGELOG.txt')
+            else:
+                changelog_path = os.path.join(self.env['root'], 'panopoly', 'modules', 'panopoly', project_name, 'CHANGELOG.txt')
             module_env = env.clone(
-                root = os.path.join(self.env['root'], project_name),
-                project_name = project_name
+                root = project_root,
+                project_name = project_name,
+                changelog_path = changelog_path
             )
             self.dependencies.append(PanopolyModuleReleaseTask(module_env))
         
@@ -338,8 +313,6 @@ class PanopolyProfileReleaseTask(Task):
         self.dependencies.append(GitTagTask(env))
         #if self.env['push']:
         #    self.dependencies.append(GitPushTagTask(env))
-        self.dependencies.append(PanopolyPostReleaseTask(env))
-        #if self.env['push']:
         #    self.dependencies.append(CreateReleaseTask(env))
         
     def _finished(self):

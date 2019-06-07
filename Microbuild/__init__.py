@@ -1,5 +1,6 @@
 
 import os
+import sys
 import collections
 import subprocess
 
@@ -68,7 +69,7 @@ class Task(object):
             try:
                 self._execute()
             except Exception, e:
-                raise TaskExecutionError("Task execution failed", self, e)
+                raise TaskExecutionError("Task execution failed", self, sys.exc_info())
 
             #if not self._finished():
             #    raise TaskUnfinishedError("Task executed but isn't marked as finished! Something has gone wrong.", self)
