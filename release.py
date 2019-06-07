@@ -10,35 +10,6 @@ import mechanize
 
 from Microbuild import Environment, Task, TaskExecutionError, execute_cmd, check_cmd
 
-def update_makefile_revision(make_file, project_name, revision):
-    lines = []
-
-    with open(make_file, 'rt') as fd:
-        for line in fd.readlines():
-            if re.match(r'projects\[%s\]\[download\]\[revision\]' % project_name, line):
-                lines.append('projects[%s][download][revision] = %s\n' % (project_name, revision))
-            else:
-                lines.append(line)
-
-    with open(make_file, 'wt') as fd:
-        for line in lines:
-            fd.write(line)
-
-def update_makefile_version(make_file, version):
-    lines = []
-
-    with open(make_file, 'rt') as fd:
-        for line in fd.readlines():
-            match = re.match(r'projects\[([a-z_]+)\]\[version\]', line)
-            if match:
-                lines.append('projects[%s][version] = %s\n' % (match.group(1), version))
-            else:
-                lines.append(line)
-
-    with open(make_file, 'wt') as fd:
-        for line in lines:
-            fd.write(line)
-
 def get_latest_commit_message(root):
     os.chdir(root)
     return execute_cmd('git log --pretty=format:%s -n 1 HEAD', capture=True)
@@ -128,27 +99,6 @@ class UpdateChangelogTask(Task):
             fd.write(entry)
             fd.write(changelog)
 
-# TODO: This isn't safe to do one at a time on the drupal-org.make - we've got
-# to do them all at once when restoring the drupal-org.make.
-class UpdateMakeFileForModuleRevisionTask(Task):
-    pattern = r'^projects\[%(project_name)s\]\[download\]\[revision\] = ([a-f0-9]+)'
-
-    def _open(self, mode):
-        return open(os.path.join(self.env['make_file']), mode)
-
-    def _latest_revision(self):
-        os.chdir(self.env['root'])
-        return execute_cmd('git rev-parse HEAD', capture=True)[0:7]
-
-    def _finished(self):
-        with self._open('rt') as fd:
-            regex = self.pattern % self.env
-            match = re.search(regex, fd.read(), re.MULTILINE)
-            return match and match.group(1) == self._latest_revision()
-
-    def _execute(self):
-        update_makefile_revision(self.env['make_file'], self.env['project_name'], self._latest_revision())
-
 # @todo: remove this global
 br = None
 
@@ -236,13 +186,15 @@ class PanopolyModuleReleaseTask(Task):
         self.dependencies.append(GitCloneTask(env))
         # TODO: This isn't a safe Task! It's messing with global state (the
         #       CHANGELOG.txt files in the main profile repo).
-        self.dependencies.append(UpdateChangelogTask(env))
-        if self.env['project_name'] == 'panopoly_demo':
-            self.dependencies.append(GitCommitTask(env.clone(commit_message='Updated CHANGELOG.txt for %(new_version)s release.' % env)))
-        self.dependencies.append(GitTagTask(env))
-        if self.env['push']:
-            self.dependencies.append(GitPushTagTask(env))
-            self.dependencies.append(CreateReleaseTask(self.env))
+        if self.env['stage'] == 1:
+            self.dependencies.append(UpdateChangelogTask(env))
+            if self.env['project_name'] == 'panopoly_demo':
+                self.dependencies.append(GitCommitTask(env.clone(commit_message='Updated CHANGELOG.txt for %(new_version)s release.' % env)))
+        elif self.env['stage'] == 2:
+            self.dependencies.append(GitTagTask(env))
+            if self.env['push']:
+                self.dependencies.append(GitPushTagTask(env))
+                self.dependencies.append(CreateReleaseTask(self.env))
 
     def _finished(self):
         # TODO: This isn't a real Task, and so having a _finished() just creates problems.
@@ -282,12 +234,6 @@ class PanopolyProfileReleaseTask(Task):
         my_root = os.path.join(self.env['root'], 'panopoly')
         env = self.env.clone(
             root = my_root,
-            make_file = os.path.join(my_root, 'drupal-org.make'),
-            temp_make_file = os.path.join(my_root, 'drupal-org-temporary.make'),
-            release_make_file = os.path.join(my_root, 'drupal-org-release.make'),
-            build_pantheon_make_file = os.path.join(my_root, 'build-panopoly-pantheon.make'),
-            build_panopoly_make_file = os.path.join(my_root, 'build-panopoly.make'),
-            build_release_make_file = os.path.join(my_root, 'build-panopoly-release.make'),
             short_version = short_version,
             message = "Getting ready for the %s release" % short_version,
             modules = self.modules
@@ -308,12 +254,14 @@ class PanopolyProfileReleaseTask(Task):
             )
             self.dependencies.append(PanopolyModuleReleaseTask(module_env))
         
-        self.dependencies.append(UpdateChangelogTask(env))
-        self.dependencies.append(PanopolyPreReleaseTask(env))
-        self.dependencies.append(GitTagTask(env))
-        #if self.env['push']:
-        #    self.dependencies.append(GitPushTagTask(env))
-        #    self.dependencies.append(CreateReleaseTask(env))
+        if self.env['stage'] == 1:
+            self.dependencies.append(UpdateChangelogTask(env))
+            self.dependencies.append(PanopolyPreReleaseTask(env))
+            self.dependencies.append(GitTagTask(env))
+
+            #if self.env['push']:
+            #    self.dependencies.append(GitPushTagTask(env))
+            #    self.dependencies.append(CreateReleaseTask(env))
         
     def _finished(self):
         # TODO: This isn't a real Task, and so having a _finished() just creates problems.
@@ -338,6 +286,7 @@ def main():
     parser.add_argument('--drush', dest='drush', default='drush', help='Path to your drush executable')
     parser.add_argument('--branch', dest='branch', default='7.x-1.x', help='The branch that the new version is on')
     parser.add_argument('--push', dest='push', default=False, action='store_true', help='The branch that the new version is on')
+    parser.add_argument('--stage', dest='stage', type=int, default=1, required=True, help='The release stage (1 or 2)')
     args = parser.parse_args()
 
     # Create a temporary directory to pull all the code and do our magic.
@@ -353,6 +302,9 @@ def main():
         'drush': args.drush,
         'branch': args.branch,
         'push': args.push,
+        # Stage 1: Get the profile ready to release
+        # Stage 2: Release the panopoly_* modules
+        'stage': args.stage,
         'project_name': 'panopoly',
     })
 
